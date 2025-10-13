@@ -1,0 +1,141 @@
+---
+title: "Tolerance Of Point Mutations In The Standard Genetic Code"
+subtitle: "CSB195- Report 1"
+author: "Caellum Yip Hoi - Lee"
+date: last-modified       # This keyword is evaluated when  the document is rendered.
+version: "v 1.0"
+format:
+  html:
+    toc: true
+    number-sections: true
+    code-fold: true
+    theme: cosmo
+  pdf:
+    toc: true
+    number-sections: true
+    latex-engine: xelatex
+    geometry: margin=1in
+editor: visual
+fontsize: 12pt
+execute:
+  echo: true
+  warning: false
+  error: false
+cross-references: true
+---
+
+# Abstract
+
+<!-- The purpose of this report is to examine the robustness of the Standard Genetic Code(SGC) in regards to point mutations that can occur.   -->
+
+---
+
+
+
+```{r}
+#| label: robustness-analysis
+#| fig-cap: "Distribution of code robustness values for 1000 random genetic codes. The red line marks the SGC's robustness."
+#| fig-width: 7
+#| fig-height: 5
+
+# Load data and similarity function
+aaSim <- readRDS("dat/aaSim.v4.1.Rds")
+aaFeatureSpace <- readRDS("dat/aaFeatureSpace.2025.Rds")
+
+
+# Define SGC codon map
+sgc <- c(
+  "UUU"="F", "UUC"="F", "UUA"="L", "UUG"="L",
+  "CUU"="L", "CUC"="L", "CUA"="L", "CUG"="L",
+  "AUU"="I", "AUC"="I", "AUA"="I", "AUG"="M",
+  "GUU"="V", "GUC"="V", "GUA"="V", "GUG"="V",
+  "UCU"="S", "UCC"="S", "UCA"="S", "UCG"="S",
+  "CCU"="P", "CCC"="P", "CCA"="P", "CCG"="P",
+  "ACU"="T", "ACC"="T", "ACA"="T", "ACG"="T",
+  "GCU"="A", "GCC"="A", "GCA"="A", "GCG"="A",
+  "UAU"="Y", "UAC"="Y", "UAA"="*", "UAG"="*",
+  "CAU"="H", "CAC"="H", "CAA"="Q", "CAG"="Q",
+  "AAU"="N", "AAC"="N", "AAA"="K", "AAG"="K",
+  "GAU"="D", "GAC"="D", "GAA"="E", "GAG"="E",
+  "UGU"="C", "UGC"="C", "UGA"="*", "UGG"="W",
+  "CGU"="R", "CGC"="R", "CGA"="R", "CGG"="R",
+  "AGU"="S", "AGC"="S", "AGA"="R", "AGG"="R",
+  "GGU"="G", "GGC"="G", "GGA"="G", "GGG"="G"
+)
+
+# --- Function definitions ---
+code_robustness <- function(code, aaSim) {
+  nucs <- c("U", "C", "A", "G")
+  codons <- names(code)
+  total <- 0
+  count <- 0
+  
+  for (c in codons) {
+    aa1 <- code[c]
+    for (pos in 1:3) {
+      for (n in setdiff(nucs, substr(c, pos, pos))) {
+        mutant <- c
+        substr(mutant, pos, pos) <- n
+        if (mutant %in% codons) {
+          aa2 <- code[mutant]
+          
+          # safer lookup
+          sim <- if (aa1 %in% rownames(aaSim) && aa2 %in% colnames(aaSim)) {
+            aaSim[aa1, aa2]
+          } else {
+            0
+          }
+          
+          total <- total + sim
+          count <- count + 1
+        }
+      }
+    }
+  }
+  total / count
+}
+
+
+random_code <- function(template_code, stop_dissimilar = TRUE) {
+  deg_structure <- split(names(template_code[template_code != "*"]),
+                         template_code[template_code != "*"])
+  aas <- names(deg_structure)
+  shuffled_aas <- sample(aas)
+  names(deg_structure) <- shuffled_aas
+  new_code <- unlist(lapply(names(deg_structure), function(aa) {
+    setNames(rep(aa, length(deg_structure[[aa]])), deg_structure[[aa]])
+  }))
+  if (stop_dissimilar) {
+    new_code[c("UAA", "UAG", "UGA")] <- c("*A", "*B", "*C")
+  } else {
+    new_code[c("UAA", "UAG", "UGA")] <- "*"
+  }
+  new_code
+}
+
+# --- Main analysis ---
+set.seed(42)
+sgc_rob <- code_robustness(sgc, aaSim)
+
+n <- 1000
+rand_robs <- replicate(n, {
+  rc <- random_code(sgc, stop_dissimilar = TRUE)
+  code_robustness(rc, aaSim)
+})
+
+# Display numeric output
+cat("SGC robustness score:", round(sgc_rob, 4), "\n")
+cat("Mean random-code robustness:", round(mean(rand_robs), 4), "\n")
+
+# Display plot
+hist(rand_robs, breaks=40, col="lightgray",
+     main="Code Robustness Comparison",
+     xlab="Robustness score")
+abline(v=sgc_rob, col="red", lwd=2)
+legend("topright", legend="SGC", col="red", lwd=2)
+
+
+```
+
+
+The mean deviation of the Standard Genetic Code (SGC) from random codes is **`r round(sgc_rob, 4)`**.
