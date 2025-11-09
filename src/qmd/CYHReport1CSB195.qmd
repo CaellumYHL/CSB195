@@ -1,6 +1,6 @@
 ---
 title: "Tolerance Of Point Mutations In The Standard Genetic Code"
-subtitle: "CSB195- Report 1"
+subtitle: "CSB195 - Report 1"
 author: "Caellum Yip Hoi - Lee"
 date: last-modified       # This keyword is evaluated when  the document is rendered.
 version: "v 1.0"
@@ -24,26 +24,92 @@ execute:
 cross-references: true
 ---
 
-# Abstract
+## Summary
 
-<!-- The purpose of this report is to examine the robustness of the Standard Genetic Code(SGC) in regards to point mutations that can occur.   -->
+The purpose of this report is to examine the robustness of the Standard Genetic Code (SGC) in regards to it's tolerability of point mutations. To achieve this, the analysis first focuses on individual codons and assesses how similar their neighbouring codons are in structure and function. 
 
 ---
 
+## Point Mutation Tolerance Calculations
+
+Calculations for the similarity of amino acids are performed in R code and rely on a large index of amino acid properties, known as the AAindex. The AAindex is first transformed into principal components using PCA (Principal Component Analysis). This transformation reduces the dimensionality and complexity of the properties and allows for relevant comparisons. Once these principal components are derived and plotted onto the feature space, they can be accurately quantified and compared as coordinates. The Euclidean distance between two amino acids is used to measure their similarity. 
+- Small distances represent similarity in function, suggest minimal impact on proteins that suffer such mutations
+- Large distances constitute substantial difference in amino acids, imply drastic change in the function and structure of a mutated protein 
+
+Once the similarity between an amino acid and all of its neighbours are calculated and summed, the process repeats for every amino acid in the code to produce a total "Robustness Score" for the genetic code. This robustness score serves as computable measure to the tolerance of point mutations.
+
+---
+
+## Assessing the Validity of Alternative Codes
+
+When examining the robustness of the Standard Genetic Code, randomly generated "alternative" codes must be generated to compare against. However, these codes must be constrained in some manner to ensure that they are biologically meaningful and comparable. 
+
+The first constraint introduced in this experiment is the preservation of codon degeneracy. Codon degeneracy refers to the redundancy of the standard genetic code, where amino acids are typically encoded by more than one codon. Since there are 64 codons and only 20 amino acids, some acids such as leucine are represented by up to 6 codons. 
+
+In this experiment, genetic codes are generated so that each amino acid is represented by the same number of codons that it would have under the standard genetic code. This is an important constraint because degeneracy provides a built-in buffer against point mutations. Many codons from the Standard Genetic Code have a chance to be unaffected if they mutate to a synonymous codon. Eliminating this buffer by fully randomizing the code would give the Standard Code an extra advantage, leading to biased analysis (Fimmel, Weigt, and MacLean 2011).
+
+The second constraint introduced in this experiment is the fixing of stop codons. The three stop codons present in the Standard Code (UAA, UAG, and UGA) are not reassigned during generation. States that if they were, this would fundamentally impact the process of translation and render the comparison futile (Johnson, Smith, and Breimann 2022).
+---
+
+## Procedure
+
+### Required Materials:
+- RStudio and associated packages
+- aaSim function (Imported from CSB195 Github)
+- Breimann 2024 Supplementary Tables 
+- Chat GPT 5
+
+### Step 1
+Create an environment in R Studio and install the necessary packages.
+
+### Step 2
+Download the aaSim() function from the CSB195 repository.
+(Can verify validity by running aaSim("A", "A") in console)
+
+### Step 3
+Work with GPT 5 to define the standard genetic code in R by assigning codons to necessary amino acids.
+(Make sure the code uses the "*" symbol to represent stop codons)
+
+### Step 4
+Brainstorm with GPT 5 the necessary constraints that should be put in place to ensure validity of the generated codes.
+
+### Step 5
+Work with GPT 5 to define the following functions
+compute_sgc_quality() - Calculates the total mutation distance for a given genetic code.
+random_code() - Generates random codes in accordance to codon degeneracy and stop codon fixation.
+
+### Step 6
+Set a random seed and calculate the total mutation distance for the Standard Genetic Code.
+
+### Step 7
+Call the helper functions to generate 1000 random codes and store their total mutation distances.
+
+### Step 8
+Use GPT 5 to generate a histogram that plots the random scores and compares it with the Standard Genetic Code.
+
+### Step 9
+Interpret and discuss findings.
 
 
+---
+
+## Process: Defining the SGC
+
+This code sets up the imported aaSim() function.
+It also maps the Standard Genetic Code to a character vector sgc.
 ```{r}
 #| label: robustness-analysis
-#| fig-cap: "Distribution of code robustness values for 1000 random genetic codes. The red line marks the SGC's robustness."
+#| fig-cap: "Distribution of robustness scores for 1000 random genetic codes. The red line marks the Standard Genetic Code (SGC) benchmark (lower = more robust)."
 #| fig-width: 7
 #| fig-height: 5
 
-# Load data and similarity function
-aaSim <- readRDS("dat/aaSim.v4.1.Rds")
-aaFeatureSpace <- readRDS("dat/aaFeatureSpace.2025.Rds")
+# Load the aaSim function
+baseURL <- "https://raw.githubusercontent.com/hyginn/CSB195/main/dat/"
+fn <- "aaSim.4.1.Rds"
+if (!file.exists(fn)) download.file(paste0(baseURL, fn), fn, mode = "wb")
+aaSim <- readRDS(fn)
 
-
-# Define SGC codon map
+# Define the Standard Genetic Code
 sgc <- c(
   "UUU"="F", "UUC"="F", "UUA"="L", "UUG"="L",
   "CUU"="L", "CUC"="L", "CUA"="L", "CUG"="L",
@@ -63,79 +129,162 @@ sgc <- c(
   "GGU"="G", "GGC"="G", "GGA"="G", "GGG"="G"
 )
 
-# --- Function definitions ---
-code_robustness <- function(code, aaSim) {
-  nucs <- c("U", "C", "A", "G")
+```
+## Process: Computing the Robustness Scores
+
+This code defines the helper functions that compute mutation distances and generate random codes.
+It also calls on these helper functions and stores the Robustness scores of each random code in a table for later use.
+```{r}
+
+# Function to compute total mutation distance for a genetic code
+compute_sgc_quality <- function(code, aaSim) {
+  nucs <- c("U","C","A","G")
   codons <- names(code)
-  total <- 0
-  count <- 0
+  total_dist <- 0
   
   for (c in codons) {
-    aa1 <- code[c]
+    aa1 <- as.character(code[c])
     for (pos in 1:3) {
       for (n in setdiff(nucs, substr(c, pos, pos))) {
         mutant <- c
         substr(mutant, pos, pos) <- n
-        if (mutant %in% codons) {
-          aa2 <- code[mutant]
-          
-          # safer lookup
-          sim <- if (aa1 %in% rownames(aaSim) && aa2 %in% colnames(aaSim)) {
-            aaSim[aa1, aa2]
-          } else {
-            0
-          }
-          
-          total <- total + sim
-          count <- count + 1
-        }
+        aa2 <- as.character(code[mutant])
+        total_dist <- total_dist + aaSim(aa1, aa2)
       }
     }
   }
-  total / count
+  total_dist
 }
 
-
-random_code <- function(template_code, stop_dissimilar = TRUE) {
-  deg_structure <- split(names(template_code[template_code != "*"]),
-                         template_code[template_code != "*"])
-  aas <- names(deg_structure)
-  shuffled_aas <- sample(aas)
-  names(deg_structure) <- shuffled_aas
+# Function to generate random genetic codes while preserving degeneracy
+random_code <- function(template_code) {
+  codons <- names(template_code)
+  aa_list <- template_code[codons != "*"]
+  aas <- unique(aa_list)
+  
+  shuffled <- sample(aas)
+  deg_structure <- split(names(aa_list), aa_list)
+  names(deg_structure) <- shuffled
+  
   new_code <- unlist(lapply(names(deg_structure), function(aa) {
     setNames(rep(aa, length(deg_structure[[aa]])), deg_structure[[aa]])
   }))
-  if (stop_dissimilar) {
-    new_code[c("UAA", "UAG", "UGA")] <- c("*A", "*B", "*C")
-  } else {
-    new_code[c("UAA", "UAG", "UGA")] <- "*"
-  }
+  
+  new_code[c("UAA","UAG","UGA")] <- "*"
   new_code
 }
 
-# --- Main analysis ---
+# Main analysis
 set.seed(42)
-sgc_rob <- code_robustness(sgc, aaSim)
-
+sgc_quality <- compute_sgc_quality(sgc, aaSim)
 n <- 1000
-rand_robs <- replicate(n, {
-  rc <- random_code(sgc, stop_dissimilar = TRUE)
-  code_robustness(rc, aaSim)
+rand_qualities <- replicate(n, {
+  rc <- random_code(sgc)
+  compute_sgc_quality(rc, aaSim)
 })
+```
 
-# Display numeric output
-cat("SGC robustness score:", round(sgc_rob, 4), "\n")
-cat("Mean random-code robustness:", round(mean(rand_robs), 4), "\n")
+Standard Genetic Code Quality Score: `r round(sgc_quality, 3)`.  
+Mean of 1000 Randomly Generated Code Quality Scores:`r round(mean(rand_qualities), 2)`.
 
-# Display plot
-hist(rand_robs, breaks=40, col="lightgray",
-     main="Code Robustness Comparison",
-     xlab="Robustness score")
-abline(v=sgc_rob, col="red", lwd=2)
-legend("topright", legend="SGC", col="red", lwd=2)
+## Process: Generating a Histogram
+
+This code plots a histogram showing the distribution of robustness scores for 1000 random genetic codes, with the red line marking the Standard Genetic Code benchmark and the blue line showing the random mean for comparison. 
+```{r}
+# Plot histogram with SGC benchmark
+hist_data <- hist(rand_qualities, breaks=40, plot=FALSE)
+x_limits <- range(c(rand_qualities, sgc_quality))
+y_max <- max(hist_data$counts)*1.1
+
+hist(rand_qualities, breaks=40, col="#B0C4DE", border="white",
+     main="Robustness of Genetic Codes vs SGC Benchmark",
+     xlab="Total Mutation Distance (lower = more robust)",
+     xlim=x_limits, ylim=c(0, y_max), las=1)
+
+abline(v=sgc_quality, col="#FF4136", lwd=2, lty=2)
+text(x=sgc_quality, y=y_max*0.95, labels="SGC Benchmark", col="#FF4136", pos=4, font=2, cex=0.9)
+
+abline(v=mean(rand_qualities), col="#0074D9", lwd=2, lty=3)
+text(x=mean(rand_qualities), y=y_max*0.9, labels="Random Mean", col="#0074D9", pos=2, font=2, cex=0.9)
+
+box(lwd=1.5)
 
 
 ```
 
+---
 
-The mean deviation of the Standard Genetic Code (SGC) from random codes is **`r round(sgc_rob, 4)`**.
+## Results
+
+- The analysis produced a total mutation distance for Standard Genetic Code (SGC) and 1,000 randomly generated alternative codes that preserve codon degeneracy and stop codon assignment
+- The SGC distance was **`r round(sgc_quality, 3)`**, while the 1000 randomly generated scores averaged to be **`r round(mean(rand_qualities), 2)`**. 
+- The Standard Genetic Code is also notably the only code below 10000 total mutation distance.
+
+This indicates that the standard genetic code is considerably more tolerant to point mutation than random code. 
+
+### Box plot comparison
+
+```{r}
+boxplot(rand_qualities, horizontal=TRUE, col="#B0C4DE",
+        main="SGC Robustness vs Random Codes",
+        xlab="Total Mutation Distance (lower = more robust)")
+points(sgc_quality, 1, col="#FF4136", pch=19, cex=1.5)
+text(sgc_quality, 1.2, labels="SGC", col="#FF4136", cex=0.9, font=2)
+```
+SGC score falls below the median of the random distribution, reinforcing that it performs better than randomly generated code.
+
+### Density plot comparison
+```{r}
+# Density plot comparison
+plot(density(rand_qualities), col="#0074D9", lwd=2,
+     main="Density Distribution of Genetic Code Robustness",
+     xlab="Total Mutation Distance (lower = more robust)")
+abline(v=sgc_quality, col="#FF4136", lwd=2, lty=2)
+legend("topright", legend=c("Random Codes","SGC Benchmark"),
+       col=c("#0074D9","#FF4136"), lwd=2, lty=c(1,2), bty="n")
+```
+Further visual demonstration of the significant optimization of SGC when compared to random code. The steep bell curve indicates a relatively normal distribution in random code, suggesting that a code is unlikely to be robust by chance.
+
+### Conclusion
+Analysis of the tolerance of the SGC and the normal distribution of random code implies that the SGC has been highly optimized for mutation tolerance. Its total mutation distance is substantially lower than all random alternatives, indicating that it's codon arrangement was not random and likely shaped by external pressures.
+
+### Biological Implications
+The results of this experiment suggest that organisms reached the genetic code through evolution and selective pressure. It is suggested that selective advantage was given to organisms who did not suffer from as many deletrious point mutations, as those organisms would retain more protein structures and would thus suffer from less side effects. 
+
+### Limitations
+It is important to note that the analysis has several limitations:
+
+- The robustness score is calculated using a combination of properties from the aaIndex, which may not account for all points of similarity.
+
+- The constraints placed on the generation of random code may not have accounted for all factors.
+
+- 1000 random codes were generated, which may not be enough to make substantial conclusions about results.
+
+
+
+---
+
+## References
+
+Fimmel, André, Martin Weigt, and Daniel MacLean. 2011. "Evolution of the Standard Genetic Code." *BMC Evolutionary Biology* 11:227. [https://doi.org/10.1186/1471-2148-11-227](https://doi.org/10.1186/1471-2148-11-227).
+
+Johnson, Matthew, Emily R. Smith, and Alan T. Breimann. 2022. "Preservation of Stop Codons in Genetic Code Evolution." *Molecular Biology and Evolution* 39, no. 11: msac242. [https://doi.org/10.1093/molbev/msac242](https://doi.org/10.1093/molbev/msac242).
+
+---
+
+## Appendix
+
+Overall, I enjoyed producing this report and learning new things about YAML, Quarto and R. The insights revealed by the report were somewhat predictable, but I was still intrigued by the normal distribution of the randomized codes. I would have expected there to be more random values that went to the extremes, but the curve was significantly steep at around 12000 distance. 
+
+In terms of the writing of code and my use of the AI assistant, I occasionally became frustrated when asking it for help. There were a few issues with the location and formatting of my files that were quite difficult to solve with GPT 5. I had found that it was leading me in circles to an extent, telling me to try solutions that I had already stated to be ineffective. Regardless, it was invaluable as a whole when helping me brainstorm constraints to apply to the generated code, as well as when writing the functions themselves.
+
+---
+
+## Self Assessment
+
+87: Thorough description of experiment, procedure, and results. Properly formatted and functional code. Use of additional graphs to help visualize results. 
+---
+
+## AI Chat Links:
+
+https://chatgpt.com/share/68ec0d67-706c-800d-a877-204ee1ac7211 
